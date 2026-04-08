@@ -60,7 +60,7 @@ function normalizeError(error: unknown, fallback: string, hideTechnical = false)
 function formatPlayTime(minutes: number): string {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
-  return `${hours} С‡ ${mins} Рј`
+  return `${hours} ч ${mins} м`
 }
 
 function parseJvmArgs(value: string | undefined): string[] {
@@ -122,7 +122,7 @@ export function PlayPanel() {
       })
     } catch (error) {
       if (!options?.silent) {
-        setValidationError(normalizeError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РІРµСЂСЃРёРё"))
+        setValidationError(normalizeError(error, "Не удалось загрузить версии"))
       }
     }
   }, [])
@@ -277,14 +277,14 @@ export function PlayPanel() {
       if (!validation.valid) {
         const missing = validation.missingFiles.length
           ? validation.missingFiles.join(", ")
-          : "РћС‚СЃСѓС‚СЃС‚РІСѓСЋС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ С„Р°Р№Р»С‹ РІРµСЂСЃРёРё"
+          : "Отсутствуют обязательные файлы версии"
         setValidationError(missing)
         return false
       }
       setValidationError(null)
       return true
     } catch (error) {
-      setValidationError(normalizeError(error, "РџСЂРѕРІРµСЂРєР° С„Р°Р№Р»РѕРІ РЅРµ СѓРґР°Р»Р°СЃСЊ"))
+      setValidationError(normalizeError(error, "Проверка файлов не удалась"))
       return false
     }
   }, [])
@@ -292,7 +292,7 @@ export function PlayPanel() {
   const installVersionIfNeeded = useCallback(async (versionId: string, installed: boolean) => {
     if (installed) return
 
-    setLaunchStatus("РЎРєР°С‡РёРІР°РЅРёРµ РІРµСЂСЃРёРё...")
+    setLaunchStatus("Скачивание версии...")
     setLaunchProgress(5)
     const task = await backendService.installVersion(versionId)
     let status = task
@@ -300,11 +300,11 @@ export function PlayPanel() {
 
     while (!status.completed) {
       if (Date.now() > deadline) {
-        throw new Error("РџСЂРµРІС‹С€РµРЅРѕ РІСЂРµРјСЏ РѕР¶РёРґР°РЅРёСЏ Р·Р°РіСЂСѓР·РєРё РІРµСЂСЃРёРё")
+        throw new Error("Превышено время ожидания загрузки версии")
       }
       await new Promise(resolve => window.setTimeout(resolve, 1200))
       status = await backendService.getInstallTaskStatus(task.taskId)
-      setLaunchStatus(translateInstallStatus(status.status || "РЎРєР°С‡РёРІР°РЅРёРµ РІРµСЂСЃРёРё..."))
+      setLaunchStatus(translateInstallStatus(status.status || "Скачивание версии..."))
       setLaunchProgress(Math.max(5, Math.min(94, status.progress)))
     }
 
@@ -317,11 +317,11 @@ export function PlayPanel() {
 
   const simulateLaunchProgress = useCallback(() => {
     const steps = [
-      "РџРѕРґРіРѕС‚РѕРІРєР° Р·Р°РїСѓСЃРєР°...",
-      "РџСЂРѕРІРµСЂРєР° С„Р°Р№Р»РѕРІ...",
-      "РџСЂРѕРІРµСЂРєР° Java...",
-      "Р—Р°РіСЂСѓР·РєР° СЂРµСЃСѓСЂСЃРѕРІ...",
-      "Р—Р°РїСѓСЃРє РёРіСЂС‹...",
+      "Подготовка запуска...",
+      "Проверка файлов...",
+      "Проверка Java...",
+      "Загрузка ресурсов...",
+      "Запуск игры...",
     ]
 
     let currentStep = 0
@@ -338,7 +338,7 @@ export function PlayPanel() {
 
   const handleLaunch = useCallback(async () => {
     if (!selectedVersionData) {
-      setValidationError("Р’РµСЂСЃРёСЏ РЅРµ РЅР°Р№РґРµРЅР°")
+      setValidationError("Версия не найдена")
       return
     }
 
@@ -348,19 +348,19 @@ export function PlayPanel() {
     try {
       await installVersionIfNeeded(selectedVersion, selectedVersionData.installed)
     } catch (error) {
-      const message = normalizeError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РІРµСЂСЃРёСЋ", true)
+      const message = normalizeError(error, "Не удалось скачать версию", true)
       setValidationError(message)
       setIsLaunching(false)
       setLaunchProgress(0)
       setLaunchStatus("")
-      toast.error("РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РІРµСЂСЃРёРё")
+      toast.error("Ошибка загрузки версии")
       return
     }
 
     const isValid = await validateFiles(selectedVersion)
     if (!isValid) {
       setIsLaunching(false)
-      toast.error("РћС€РёР±РєР° РїСЂРѕРІРµСЂРєРё С„Р°Р№Р»РѕРІ")
+      toast.error("Ошибка проверки файлов")
       return
     }
 
@@ -386,16 +386,16 @@ export function PlayPanel() {
       const response = await backendService.launchGame(launchOptions)
       setProcessId(response.processId)
       simulateLaunchProgress()
-      toast.success(`Р—Р°РїСѓСЃРє РёРіСЂС‹: ${selectedVersion}`)
+      toast.success(`Запуск игры: ${selectedVersion}`)
 
       if (effectiveSettings.closeOnLaunch) {
         window.setTimeout(() => requestHostClose(), 600)
       }
     } catch (error) {
-      const message = normalizeError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ РёРіСЂСѓ", true)
+      const message = normalizeError(error, "Не удалось запустить игру", true)
       setValidationError(message)
       setIsLaunching(false)
-      toast.error("РћС€РёР±РєР° Р·Р°РїСѓСЃРєР°")
+      toast.error("Ошибка запуска")
     }
   }, [selectedVersionData, selectedVersion, installVersionIfNeeded, validateFiles, simulateLaunchProgress, launcherSettings])
 
@@ -408,22 +408,22 @@ export function PlayPanel() {
         await backendService.openFolder("versions")
       }
     } catch {
-      toast.error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ РїР°РїРєСѓ РІРµСЂСЃРёРё")
+      toast.error("Не удалось открыть папку версии")
     }
   }, [selectedVersionData])
 
   const uninstallSelectedVersion = useCallback(async () => {
     if (!selectedVersionData) return
     if (selectedVersionData.type === "modpack" || selectedVersionData.id.startsWith(MODPACK_VERSION_PREFIX)) {
-      toast.info("РЎР±РѕСЂРєРё СѓРґР°Р»СЏСЋС‚СЃСЏ РІРѕ РІРєР»Р°РґРєРµ В«РЎР±РѕСЂРєРёВ»")
+      toast.info("Сборки удаляются во вкладке «Сборки»")
       return
     }
     try {
       await backendService.uninstallVersion(selectedVersionData.id)
-      toast.success(`РЈРґР°Р»РµРЅРѕ: ${selectedVersionData.name}`)
+      toast.success(`Удалено: ${selectedVersionData.name}`)
       await loadVersions({ silent: true })
     } catch (error) {
-      const message = normalizeError(error, "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РІРµСЂСЃРёСЋ", true)
+      const message = normalizeError(error, "Не удалось удалить версию", true)
       toast.error(message)
     }
   }, [selectedVersionData, loadVersions])
@@ -450,10 +450,10 @@ export function PlayPanel() {
                   <h2 className="text-white text-lg font-medium font-nunito tracking-wider">moonlauncher</h2>
                   <p className="text-white/70 text-sm font-mojangles">
                     {isLaunching
-                      ? "Р—Р°РїСѓСЃРє..."
+                      ? "Запуск..."
                       : selectedVersionData?.installed
-                        ? "Р“РѕС‚РѕРІРѕ Рє РёРіСЂРµ"
-                        : "Р’РµСЂСЃРёСЏ Р±СѓРґРµС‚ СЃРєР°С‡Р°РЅР° Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё"}
+                        ? "Готово к игре"
+                        : "Версия будет скачана автоматически"}
                   </p>
                 </div>
               </div>
@@ -466,7 +466,7 @@ export function PlayPanel() {
                 <button
                   type="button"
                   onClick={() => setValidationError(null)}
-                  aria-label="Р—Р°РєСЂС‹С‚СЊ СѓРІРµРґРѕРјР»РµРЅРёРµ РѕР± РѕС€РёР±РєРµ"
+                  aria-label="Закрыть уведомление об ошибке"
                   className="absolute right-3 top-3 rounded-md border border-red-300/30 p-1 text-red-200/90 transition hover:bg-red-300/10 hover:text-red-100"
                 >
                   <X className="h-4 w-4" />
@@ -476,11 +476,11 @@ export function PlayPanel() {
 
             <div className="flex items-end gap-4 flex-wrap">
               <div className="space-y-2">
-                <label className="text-white/90 text-sm font-medium block font-mojangles">Р’РµСЂСЃРёСЏ</label>
+                <label className="text-white/90 text-sm font-medium block font-mojangles">Версия</label>
                 <Input
                   value={versionQuery}
                   onChange={event => setVersionQuery(event.target.value)}
-                  placeholder="РџРѕРёСЃРє РІРµСЂСЃРёРё..."
+                  placeholder="Поиск версии..."
                   className="w-80 h-10 glass-button border-white/20 text-white font-mojangles bg-black/40 placeholder:text-white/50"
                   disabled={isLaunching}
                 />
@@ -495,7 +495,7 @@ export function PlayPanel() {
                           <span>{version.name}</span>
                           {version.installed && (
                             <Badge variant="outline" className="text-xs bg-green-500/20 text-green-400 border-green-400/50 font-mojangles">
-                              РЈСЃС‚Р°РЅРѕРІР»РµРЅР°
+                              Установлена
                             </Badge>
                           )}
                         </div>
@@ -512,12 +512,12 @@ export function PlayPanel() {
                   try {
                     await backendService.openFolder("root")
                   } catch {
-                    toast.error("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ РїР°РїРєСѓ РёРіСЂС‹")
+                    toast.error("Не удалось открыть папку игры")
                   }
                 }}
               >
                 <FolderOpen className="size-4 mr-2" />
-                РџР°РїРєР° РёРіСЂС‹
+                Папка игры
               </Button>
 
               <div className="relative" ref={versionMenuRef}>
@@ -534,7 +534,7 @@ export function PlayPanel() {
                 </Button>
 
                 {isVersionMenuOpen && (
-                  <div className="absolute bottom-full left-0 mb-2 z-[220] w-72 glass-button bg-gray-900/95 border-white/20 text-white rounded-xl p-1 overflow-visible">
+                  <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-[260] w-72 rounded-xl border border-white/20 bg-gray-900/95 text-white p-1 shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
                     <button
                       type="button"
                       className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/10 transition-colors font-mojangles"
@@ -544,7 +544,7 @@ export function PlayPanel() {
                       }}
                     >
                       <RefreshCw className="size-4" />
-                      РћР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє РІРµСЂСЃРёР№
+                      Обновить список версий
                     </button>
 
                     <button
@@ -556,7 +556,7 @@ export function PlayPanel() {
                       }}
                     >
                       <FolderOpen className="size-4" />
-                      РћС‚РєСЂС‹С‚СЊ РїР°РїРєСѓ РІРµСЂСЃРёРё
+                      Открыть папку версии
                     </button>
 
                     <button
@@ -569,7 +569,7 @@ export function PlayPanel() {
                       disabled={!selectedVersionData || !selectedVersionData.installed || selectedVersionData.type === "modpack"}
                     >
                       <Trash2 className="size-4" />
-                      РЈРґР°Р»РёС‚СЊ РІС‹Р±СЂР°РЅРЅСѓСЋ РІРµСЂСЃРёСЋ
+                      Удалить выбранную версию
                     </button>
                   </div>
                 )}
@@ -578,7 +578,7 @@ export function PlayPanel() {
               <div className="relative flex items-center ml-2">
                 {isLaunching ? (
                   <button disabled className="relative cursor-not-allowed">
-                    <img src={playButtonClicked} alt="Р—Р°РїСѓСЃРє" className="h-10 w-auto opacity-80" />
+                    <img src={playButtonClicked} alt="Запуск" className="h-10 w-auto opacity-80" />
                   </button>
                 ) : (
                   <button
@@ -592,7 +592,7 @@ export function PlayPanel() {
                   >
                     <img
                       src={isHovered && selectedVersionData ? playButtonHover : playButtonImage}
-                      alt="РРіСЂР°С‚СЊ"
+                      alt="Играть"
                       className="h-10 w-auto transition-all duration-200"
                     />
                   </button>
@@ -614,10 +614,10 @@ export function PlayPanel() {
                 }`}>
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Clock className="size-5 text-blue-400" />
-                    <span className="text-white/90 font-mojangles text-sm">Р’СЂРµРјСЏ РІ РёРіСЂРµ</span>
+                    <span className="text-white/90 font-mojangles text-sm">Время в игре</span>
                   </div>
                   <div className="text-white text-lg font-mojangles">
-                    {playerStats ? formatPlayTime(playerStats.totalPlayTime) : "0 С‡ 0 Рј"}
+                    {playerStats ? formatPlayTime(playerStats.totalPlayTime) : "0 ч 0 м"}
                   </div>
                 </Card>
 
@@ -626,7 +626,7 @@ export function PlayPanel() {
                 }`}>
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Activity className="size-5 text-green-400" />
-                    <span className="text-white/90 font-mojangles text-sm">РЎРµСЃСЃРёРё</span>
+                    <span className="text-white/90 font-mojangles text-sm">Сессии</span>
                   </div>
                   <div className="text-white text-lg font-mojangles">
                     {playerStats ? playerStats.totalSessions : 0}
@@ -638,10 +638,10 @@ export function PlayPanel() {
                 }`}>
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <Calendar className="size-5 text-orange-400" />
-                    <span className="text-white/90 font-mojangles text-sm">РРіСЂРѕРІР°СЏ СЃРµСЂРёСЏ</span>
+                    <span className="text-white/90 font-mojangles text-sm">Игровая серия</span>
                   </div>
                   <div className="text-white text-lg font-mojangles">
-                    {playerStats ? `${playerStats.playStreak} РґРЅ.` : "0 РґРЅ."}
+                    {playerStats ? `${playerStats.playStreak} дн.` : "0 дн."}
                   </div>
                 </Card>
               </div>

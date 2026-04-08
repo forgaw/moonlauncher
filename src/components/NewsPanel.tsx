@@ -33,8 +33,8 @@ function openNewsUrl(article: NewsArticle) {
 
 function newsFallbackImage(article: NewsArticle): string {
   const seed = `${article.title} ${article.category}`.trim().toLowerCase()
-  const query = encodeURIComponent(seed || "minecraft")
-  return `https://source.unsplash.com/1280x720/?${query}&sig=${Math.abs(seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 1000}`
+  const encodedSeed = encodeURIComponent(seed || "minecraft-news")
+  return `https://picsum.photos/seed/${encodedSeed}/1280/720`
 }
 
 export function NewsPanel() {
@@ -119,7 +119,9 @@ export function NewsPanel() {
               <div className="grid md:grid-cols-2 gap-0">
                 <div className="h-64 md:h-auto relative">
                   <ImageWithFallback
-                    src={featuredArticle.imageUrl || newsFallbackImage(featuredArticle)}
+                    src={featuredArticle.imageUrl}
+                    fallbackSrc={newsFallbackImage(featuredArticle)}
+                    fallbackLabel="Изображение новости"
                     alt={featuredArticle.title}
                     className="w-full h-full object-cover"
                   />
@@ -150,7 +152,9 @@ export function NewsPanel() {
               <Card key={article.id} className="overflow-hidden group">
                 <div className="aspect-video overflow-hidden">
                   <ImageWithFallback
-                    src={article.imageUrl || newsFallbackImage(article)}
+                    src={article.imageUrl}
+                    fallbackSrc={newsFallbackImage(article)}
+                    fallbackLabel="Изображение новости"
                     alt={article.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
