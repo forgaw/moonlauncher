@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
@@ -431,10 +431,7 @@ def launch_game(payload: LaunchOptions) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Не удалось запустить игру. Проверьте установленную Java и файлы выбранной версии.",
-        ) from exc
+        raise HTTPException(status_code=500, detail="Не удалось запустить игру. Проверьте Java и файлы выбранной версии.") from exc
 
 
 @app.get("/api/launch/{process_id}/status")
@@ -651,3 +648,4 @@ def serve_frontend_assets(full_path: str) -> FileResponse:
         return FileResponse(frontend_build / "index.html")
 
     raise HTTPException(status_code=404, detail="Сборка фронтенда не найдена")
+

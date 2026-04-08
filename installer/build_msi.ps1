@@ -1,6 +1,6 @@
 param(
   [string]$Configuration = "Release",
-  [string]$Version = "1.0.17"
+  [string]$Version = "26.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,8 +106,7 @@ $manifestPayload | Out-File -FilePath $manifestPath -Encoding utf8
 $loaderPath = Join-Path $distRoot "moonlauncher-loader.ps1"
 $loaderScript = @"
 param(
-  [string]`$ManifestPath = "",
-  [string]`$DownloadUrl = ""
+  [string]`$ManifestPath = ""
 )
 
 `$ErrorActionPreference = "Stop"
@@ -124,8 +123,6 @@ if (Test-Path `$ManifestPath) {
       `$release = `$manifest.releases[0]
       if (`$release.installerPath -and (Test-Path `$release.installerPath)) {
         `$targetInstaller = Get-Item `$release.installerPath
-      } elseif (`$release.downloadUrl) {
-        `$DownloadUrl = [string]`$release.downloadUrl
       }
     }
   } catch {
@@ -140,18 +137,30 @@ if (-not `$targetInstaller) {
   }
 }
 
-if (-not `$targetInstaller -and `$DownloadUrl) {
-  `$downloadTarget = Join-Path `$env:TEMP "moonlauncher-latest.msi"
-  Invoke-WebRequest -Uri `$DownloadUrl -OutFile `$downloadTarget
-  `$targetInstaller = Get-Item `$downloadTarget
-}
-
 if (-not `$targetInstaller) {
-  throw "Installer was not found in dist and download URL is empty."
+  throw "Installer was not found in dist."
 }
 
 Start-Process msiexec.exe -ArgumentList @("/i", `$targetInstaller.FullName) -Verb RunAs
 "@
 $loaderScript | Out-File -FilePath $loaderPath -Encoding utf8
+
+$loaderCmdPath = Join-Path $distRoot "moonlauncher-loader.cmd"
+$loaderCmd = @"
+@echo off
+setlocal
+set "DIST=%~dp0"
+set "MSI="
+for /f "delims=" %%F in ('dir /b /a:-d /o:-d "%DIST%moonlauncher-*-x64.msi" 2^>nul') do (
+  set "MSI=%DIST%%%F"
+  goto :install
+)
+echo Installer was not found in dist.
+exit /b 1
+:install
+start "" msiexec.exe /i "%MSI%"
+exit /b 0
+"@
+$loaderCmd | Out-File -FilePath $loaderCmdPath -Encoding ascii
 
 Write-Host "MSI is ready: $outputMsi"

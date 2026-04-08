@@ -61,6 +61,16 @@ MODRINTH_BASE_URL = "https://api.modrinth.com/v2"
 CURSEFORGE_BASE_URL = "https://api.curseforge.com/v1"
 OPTIFINE_LIST_URL = "https://bmclapi2.bangbang93.com/optifine/versionList"
 GOOGLE_TRANSLATE_URL = "https://translate.googleapis.com/translate_a/single"
+NEWS_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36 moonlauncher/1.0"
+    ),
+    "Accept": "application/json,application/rss+xml,application/xml,text/xml,text/html,*/*",
+    "Accept-Language": "ru-RU,ru;q=0.95,en-US;q=0.7,en;q=0.6",
+    "Cache-Control": "no-cache",
+}
 PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
 SIDEBAR_TAB_IDS = [
     "play",
@@ -127,6 +137,7 @@ class MoonlaunchrService:
         self.available_versions_cache: dict[str, Any] = {"fetchedAt": None, "data": []}
         self.version_manifest_cache: dict[str, Any] = {"fetchedAt": None, "payload": {}}
         self.news_cache: dict[str, Any] = {"fetchedAt": None, "data": []}
+        self.news_image_cache: dict[str, str] = {}
 
         self.settings = self._load_settings()
         self._apply_proxy_settings()
@@ -1989,7 +2000,7 @@ class MoonlaunchrService:
                 "uuid": player_uuid,
                 "token": "",
                 "launcherName": "moonlauncher",
-                "launcherVersion": "1.0.0",
+                "launcherVersion": "26.0",
                 "jvmArguments": self._java_args(options),
             }
 
@@ -2488,7 +2499,7 @@ class MoonlaunchrService:
             )
 
     def _normalize_news_url(self, value: Any, base_url: str = "https://www.minecraft.net") -> str | None:
-        candidate = str(value or "").strip()
+        candidate = html.unescape(str(value or "").strip())
         if not candidate:
             return None
         if candidate.startswith("//"):
@@ -2497,6 +2508,17 @@ class MoonlaunchrService:
         if lowered.startswith("http://") or lowered.startswith("https://"):
             return candidate
         return urljoin(base_url if base_url.endswith("/") else f"{base_url}/", candidate)
+
+    def _fetch_news_text(self, url: str, timeout: int = 10) -> str:
+        response = requests.get(url, headers=NEWS_HTTP_HEADERS, timeout=timeout)
+        response.raise_for_status()
+        return response.text
+
+    def _fetch_news_json(self, url: str, timeout: int = 10) -> dict[str, Any]:
+        response = requests.get(url, headers=NEWS_HTTP_HEADERS, timeout=timeout)
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
 
     def _news_image_fallback(self, title: str, category: str) -> str:
         # Local deterministic fallback to avoid random/non-themed images when remote hosts fail.
@@ -2556,11 +2578,107 @@ class MoonlaunchrService:
                     return candidate
         return None
 
+    def _article_page_image(self, article_url: str | None) -> str | None:
+        target_url = self._normalize_news_url(article_url)
+        if not target_url:
+            return None
+        cached = self.news_image_cache.get(target_url)
+        if cached:
+            return cached
+        try:
+            html_text = self._fetch_news_text(target_url, timeout=8)
+            image_url = self._extract_news_image_from_html(html_text)
+            normalized = self._normalize_news_url(image_url, base_url=target_url) if image_url else None
+            if normalized:
+                self.news_image_cache[target_url] = normalized
+                return normalized
+        except Exception:
+            pass
+        return None
+
     def _resolve_news_image(self, image_url: Any, article_url: str | None, title: str, category: str) -> str:
         normalized_direct = self._normalize_news_url(image_url, base_url=article_url or "https://www.minecraft.net")
         if normalized_direct:
             return normalized_direct
         return self._news_image_fallback(title=title, category=category)
+
+    def _hydrate_news_images(self, articles: list[NewsArticle], max_fetch: int = 18) -> list[NewsArticle]:
+        hydrated: list[NewsArticle] = []
+        fetched = 0
+        for article in articles:
+            image = str(article.imageUrl or "").strip()
+            needs_external_image = (not image or image.startswith("data:image/")) and bool(article.url)
+            if needs_external_image and fetched < max_fetch:
+                from_article = self._article_page_image(article.url)
+                if from_article:
+                    article = NewsArticle(
+                        id=article.id,
+                        title=article.title,
+                        content=article.content,
+                        excerpt=article.excerpt,
+                        author=article.author,
+                        publishDate=article.publishDate,
+                        category=article.category,
+                        tags=article.tags,
+                        imageUrl=from_article,
+                        url=article.url,
+                        featured=article.featured,
+                    )
+                fetched += 1
+            hydrated.append(article)
+        return hydrated
+
+    def _translate_news_category(self, value: str) -> str:
+        source = str(value or "").strip()
+        if not source:
+            return "Новости"
+        normalized = source.lower()
+        if normalized in {"minecraft", "minecraft:", "minecraft news", "news page"}:
+            return "Новости Minecraft"
+        if "java edition" in normalized:
+            return "Java Edition"
+        if "minecraft for windows" in normalized or "bedrock" in normalized:
+            return "Bedrock Edition"
+        lower = source.lower()
+        if any(token in lower for token in ("java", "bedrock", "windows", "update", "snapshot", "launcher", "minecraft")):
+            translated = self._translate_to_russian(source)
+            if translated and translated != source:
+                return translated
+        return source
+
+    def _localize_news_article(self, article: NewsArticle) -> NewsArticle:
+        def translate_preserving_brand(value: str, max_len: int) -> str:
+            source_value = str(value or "").strip()
+            if not source_value or _contains_cyrillic(source_value):
+                return source_value
+            marked = source_value.replace("Minecraft", "__MINECRAFT__")
+            translated = self._translate_to_russian(marked[:max_len])
+            return translated.replace("__MINECRAFT__", "Minecraft") if translated else source_value
+
+        title = str(article.title or "").strip()
+        excerpt = str(article.excerpt or "").strip()
+        content = str(article.content or "").strip()
+        category = self._translate_news_category(str(article.category or "").strip())
+
+        title = translate_preserving_brand(title, 220) or title
+        excerpt = translate_preserving_brand(excerpt, 360) or excerpt
+        translated_content = translate_preserving_brand(content, 900)
+        if translated_content:
+            content = translated_content
+
+        return NewsArticle(
+            id=article.id,
+            title=title or article.title,
+            content=content or article.content,
+            excerpt=excerpt or article.excerpt,
+            author=article.author,
+            publishDate=article.publishDate,
+            category=category or article.category,
+            tags=article.tags,
+            imageUrl=article.imageUrl,
+            url=article.url,
+            featured=article.featured,
+        )
 
     def _news_from_mojang_payload(self, payload: dict[str, Any], limit: int = 12) -> list[NewsArticle]:
         raw_items: list[dict[str, Any]] = []
@@ -2575,15 +2693,40 @@ class MoonlaunchrService:
         for index, item in enumerate(raw_items[:limit]):
             tile = item.get("default_tile") if isinstance(item.get("default_tile"), dict) else {}
             title = str(tile.get("title") or item.get("title") or "Minecraft News").strip() or "Minecraft News"
-            body = str(tile.get("sub_header") or item.get("description") or item.get("summary") or "").strip()
+            body = str(
+                tile.get("sub_header")
+                or item.get("text")
+                or item.get("description")
+                or item.get("summary")
+                or ""
+            ).strip()
             excerpt = (body or title)[:280]
             direct_image_url = (
                 tile.get("image", {}).get("url") if isinstance(tile.get("image"), dict)
-                else item.get("image") or item.get("imageUrl") or tile.get("imageUrl")
+                else (
+                    item.get("newsPageImage", {}).get("url") if isinstance(item.get("newsPageImage"), dict)
+                    else (
+                        item.get("playPageImage", {}).get("url") if isinstance(item.get("playPageImage"), dict)
+                        else item.get("image") or item.get("imageUrl") or tile.get("imageUrl")
+                    )
+                )
             )
-            url = self._normalize_news_url(tile.get("url") or item.get("url") or item.get("read_more_link")) or "https://www.minecraft.net"
+            url = self._normalize_news_url(
+                tile.get("url")
+                or item.get("url")
+                or item.get("read_more_link")
+                or item.get("readMoreLink")
+            ) or "https://www.minecraft.net"
             category = str(item.get("article_type") or item.get("category") or "Minecraft").strip() or "Minecraft"
-            published = str(item.get("publish_date") or item.get("published") or now_iso())
+            if isinstance(item.get("newsType"), list) and item.get("newsType"):
+                category = str(item.get("category") or item.get("newsType")[0] or category).strip() or category
+            published = str(
+                item.get("publish_date")
+                or item.get("published")
+                or item.get("date")
+                or item.get("publishDate")
+                or now_iso()
+            )
             image_url = self._resolve_news_image(direct_image_url, url, title, category)
             output.append(
                 NewsArticle(
@@ -2619,11 +2762,18 @@ class MoonlaunchrService:
             ).strip()
             raw_content = encoded or description or title
             plain_content = self._strip_html(raw_content) or title
-            link = self._normalize_news_url(item.findtext("link"))
+            atom_link = item.find("{http://www.w3.org/2005/Atom}link")
+            atom_href = ""
+            if atom_link is not None and isinstance(atom_link.attrib, dict):
+                atom_href = str(atom_link.attrib.get("href") or "").strip()
+            link = self._normalize_news_url(item.findtext("link") or atom_href)
             author = (item.findtext("author") or item.findtext("{http://purl.org/dc/elements/1.1/}creator") or "Minecraft").strip()
             pub_date_raw = (item.findtext("pubDate") or "").strip()
             category = (item.findtext("category") or "Minecraft").strip() or "Minecraft"
-            guid = (item.findtext("guid") or "").strip() or f"rss-news-{index}"
+            guid_raw = (item.findtext("guid") or "").strip()
+            guid = guid_raw or f"rss-news-{index}"
+            if not link and guid_raw:
+                link = self._normalize_news_url(guid_raw)
 
             publish_date = now_iso()
             if pub_date_raw:
@@ -2726,51 +2876,39 @@ class MoonlaunchrService:
         official_articles: list[NewsArticle] = []
         community_articles: list[NewsArticle] = []
 
-        # 1) RF-friendly source.
+        # 1) Official Mojang launcher endpoint (stable image + date fields).
         try:
-            response = requests.get("https://minecraft-inside.ru/feed/", timeout=8)
-            response.raise_for_status()
-            articles = self._news_from_rss(response.text, limit=140)
-            for article in articles:
-                if not str(article.author or "").strip():
-                    article.author = "Minecraft Inside"
-                if str(article.category or "").strip().lower() == "minecraft":
-                    article.category = "Сообщество"
-            community_articles.extend(articles)
-        except Exception:
-            pass
-
-        # 2) Official Mojang launcher news endpoint.
-        try:
-            response = requests.get("https://launchercontent.mojang.com/news.json", timeout=8)
-            response.raise_for_status()
-            payload = response.json()
-            if isinstance(payload, dict):
-                articles = self._news_from_mojang_payload(payload, limit=80)
-                for article in articles:
+            payload = self._fetch_news_json("https://launchercontent.mojang.com/news.json", timeout=10)
+            if payload:
+                articles = self._news_from_mojang_payload(payload, limit=140)
+                localized_articles: list[NewsArticle] = []
+                for index, article in enumerate(articles):
+                    localized_articles.append(self._localize_news_article(article) if index < 24 else article)
+                for article in localized_articles:
                     article.author = "Minecraft"
-                    if str(article.category or "").strip().lower() == "minecraft":
+                    if str(article.category or "").strip().lower() in {"minecraft", "news page"}:
                         article.category = "Обновления"
-                official_articles.extend(articles)
+                official_articles.extend(localized_articles)
         except Exception:
             pass
 
-        # 3) Public RSS fallbacks.
+        # 2) Official community RSS fallback.
         rss_candidates = [
             "https://www.minecraft.net/en-us/feeds/community-content/rss",
-            "https://www.minecraft.net/en-us/rss",
         ]
         for rss_url in rss_candidates:
             try:
-                response = requests.get(rss_url, timeout=8)
-                response.raise_for_status()
-                articles = self._news_from_rss(response.text, limit=80)
-                for article in articles:
+                xml_text = self._fetch_news_text(rss_url, timeout=10)
+                articles = self._news_from_rss(xml_text, limit=120)
+                localized_articles = []
+                for index, article in enumerate(articles):
+                    localized_articles.append(self._localize_news_article(article) if index < 24 else article)
+                for article in localized_articles:
                     if not str(article.author or "").strip():
-                        article.author = "Minecraft"
+                        article.author = "Minecraft Community"
                     if str(article.category or "").strip().lower() == "minecraft":
-                        article.category = "Обновления"
-                official_articles.extend(articles)
+                        article.category = "Сообщество"
+                community_articles.extend(localized_articles)
             except Exception:
                 continue
 
@@ -2781,6 +2919,8 @@ class MoonlaunchrService:
         if combined and not any(item in official_articles for item in combined[:12]) and official_articles:
             newest_official = self._sort_news_desc(self._dedupe_news(official_articles))[0]
             combined = [newest_official] + [item for item in combined if item.id != newest_official.id]
+
+        combined = self._hydrate_news_images(combined, max_fetch=14)
 
         if combined:
             self.news_cache = {"fetchedAt": _utc_now(), "data": combined}
@@ -3863,7 +4003,7 @@ class MoonlaunchrService:
         self._write_json(self.launcher_history_path, history)
 
     def _current_launcher_version(self) -> str:
-        return str(self.settings.get("launcherVersion") or "1.0.17")
+        return str(self.settings.get("launcherVersion") or "26.0")
 
     def get_launcher_update_status(self) -> dict[str, Any]:
         current_version = self._current_launcher_version()

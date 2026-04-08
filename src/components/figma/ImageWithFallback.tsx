@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from "react"
 
 type ImageWithFallbackProps = React.ImgHTMLAttributes<HTMLImageElement> & {
   fallbackSrc?: string
@@ -30,7 +30,7 @@ export function ImageWithFallback(props: ImageWithFallbackProps) {
 
   return didError ? (
     <div
-      className={`inline-flex items-center justify-center bg-black/45 text-center align-middle ${className ?? ''}`}
+      className={`inline-flex items-center justify-center bg-black/45 text-center align-middle ${className ?? ""}`}
       style={style}
     >
       <span className="px-3 text-xs text-white/70">{fallbackLabel || "Изображение недоступно"}</span>
