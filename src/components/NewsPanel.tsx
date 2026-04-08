@@ -3,8 +3,10 @@ import { Calendar, ExternalLink, RefreshCw } from "lucide-react"
 import { Card } from "./ui/card"
 import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog"
 import { ImageWithFallback } from "./figma/ImageWithFallback"
 import { backendService, type NewsArticle } from "../services/backend"
+import minecraftBackground from "figma:asset/c80877b64f6066aa2903984efb421fe249bbada5.png"
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000
 
@@ -32,15 +34,42 @@ function openNewsUrl(article: NewsArticle) {
 }
 
 function newsFallbackImage(article: NewsArticle): string {
-  const seed = `${article.title} ${article.category}`.trim().toLowerCase()
-  const encodedSeed = encodeURIComponent(seed || "minecraft-news")
-  return `https://picsum.photos/seed/${encodedSeed}/1280/720`
+  const category = String(article.category || "").toLowerCase()
+  if (category.includes("snapshot") || category.includes("бета")) {
+    return minecraftBackground
+  }
+  if (category.includes("обнов") || category.includes("update")) {
+    return minecraftBackground
+  }
+  return minecraftBackground
+}
+
+function toPlainText(value: string): string {
+  return String(value || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim()
 }
 
 export function NewsPanel() {
   const [news, setNews] = useState<NewsArticle[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [detailsArticle, setDetailsArticle] = useState<NewsArticle | null>(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+
+  const openDetails = useCallback((article: NewsArticle) => {
+    setDetailsArticle(article)
+    setIsDetailsOpen(true)
+  }, [])
 
   const loadNews = useCallback(async () => {
     setIsLoading(true)
@@ -136,8 +165,11 @@ export function NewsPanel() {
                       <Calendar className="size-4" />
                       {formatDate(featuredArticle.publishDate)}
                     </div>
-                    <Button variant="outline" onClick={() => openNewsUrl(featuredArticle)}>
-                      Открыть
+                    <Button variant="outline" onClick={() => openDetails(featuredArticle)}>
+                      Подробнее
+                    </Button>
+                    <Button variant="ghost" onClick={() => openNewsUrl(featuredArticle)}>
+                      Источник
                       <ExternalLink className="size-3 ml-2" />
                     </Button>
                   </div>
@@ -168,7 +200,7 @@ export function NewsPanel() {
                       <Calendar className="size-3" />
                       {formatDate(article.publishDate)}
                     </div>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => openNewsUrl(article)}>
+                    <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => openDetails(article)}>
                       Подробнее
                     </Button>
                   </div>
@@ -176,6 +208,56 @@ export function NewsPanel() {
               </Card>
             ))}
           </div>
+
+          <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+            <DialogContent className="max-w-3xl max-h-[86vh] overflow-hidden p-0 border-white/20 bg-gray-950/95 text-white backdrop-blur-xl">
+              {detailsArticle && (
+                <div className="flex h-full flex-col">
+                  <div className="relative h-56 shrink-0 overflow-hidden">
+                    <ImageWithFallback
+                      src={detailsArticle.imageUrl}
+                      fallbackSrc={newsFallbackImage(detailsArticle)}
+                      fallbackLabel="Изображение новости"
+                      alt={detailsArticle.title}
+                      className="h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    <Badge variant="outline" className={`absolute left-4 top-4 ${categoryStyle(detailsArticle.category)}`}>
+                      {detailsArticle.category}
+                    </Badge>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto p-6 space-y-4">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl leading-snug font-mojangles">{detailsArticle.title}</DialogTitle>
+                      <DialogDescription className="text-sm text-white/70 flex items-center gap-2">
+                        <Calendar className="size-4" />
+                        {formatDate(detailsArticle.publishDate)} • {detailsArticle.author}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 text-white/90">
+                      {toPlainText(detailsArticle.content || detailsArticle.excerpt)
+                        .split(/\n{2,}/)
+                        .filter(Boolean)
+                        .map((paragraph, index) => (
+                          <p key={`${detailsArticle.id}-p-${index}`} className="leading-relaxed whitespace-pre-wrap">
+                            {paragraph}
+                          </p>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                      <Button variant="outline" onClick={() => openNewsUrl(detailsArticle)}>
+                        Открыть источник
+                        <ExternalLink className="size-3 ml-2" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

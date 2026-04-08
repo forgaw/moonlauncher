@@ -2499,11 +2499,44 @@ class MoonlaunchrService:
         return urljoin(base_url if base_url.endswith("/") else f"{base_url}/", candidate)
 
     def _news_image_fallback(self, title: str, category: str) -> str:
-        normalized = re.sub(r"[^a-zA-Z0-9а-яА-ЯёЁ]+", " ", f"{title} {category} minecraft").strip()
-        words = [word for word in normalized.split() if len(word) > 2][:6]
-        query = quote(" ".join(words) or "minecraft game")
-        signature = int(hashlib.sha1(normalized.encode("utf-8", errors="ignore")).hexdigest()[:8], 16) % 1000
-        return f"https://source.unsplash.com/1280x720/?{query}&sig={signature}"
+        # Local deterministic fallback to avoid random/non-themed images when remote hosts fail.
+        title_clean = re.sub(r"\s+", " ", str(title or "").strip())[:42] or "Minecraft News"
+        category_clean = re.sub(r"\s+", " ", str(category or "").strip())[:24] or "Minecraft"
+        palette = [
+            ("#0b1220", "#1f3b73"),
+            ("#0f172a", "#1e3a8a"),
+            ("#101828", "#134e4a"),
+            ("#111827", "#3f6212"),
+        ]
+        color_index = int(hashlib.sha1(f"{title_clean}|{category_clean}".encode("utf-8", errors="ignore")).hexdigest()[:2], 16) % len(palette)
+        bg_start, bg_end = palette[color_index]
+        svg = (
+            "<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720' viewBox='0 0 1280 720'>"
+            "<defs>"
+            f"<linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>"
+            f"<stop offset='0%' stop-color='{bg_start}'/>"
+            f"<stop offset='100%' stop-color='{bg_end}'/>"
+            "</linearGradient>"
+            "</defs>"
+            "<rect width='1280' height='720' fill='url(#g)'/>"
+            "<rect x='64' y='64' width='1152' height='592' rx='24' fill='rgba(0,0,0,0.30)' stroke='rgba(255,255,255,0.16)'/>"
+            "<text x='96' y='162' fill='rgba(255,255,255,0.84)' font-family='Segoe UI, Arial' font-size='34'>Minecraft News</text>"
+            f"<text x='96' y='232' fill='white' font-family='Segoe UI, Arial' font-size='52' font-weight='700'>{html.escape(category_clean)}</text>"
+            f"<text x='96' y='310' fill='rgba(255,255,255,0.92)' font-family='Segoe UI, Arial' font-size='36'>{html.escape(title_clean)}</text>"
+            "</svg>"
+        )
+        return f"data:image/svg+xml;utf8,{quote(svg)}"
+
+    def _strip_html(self, value: str) -> str:
+        if not value:
+            return ""
+        cleaned = re.sub(r"<br\s*/?>", "\n", value, flags=re.IGNORECASE)
+        cleaned = re.sub(r"</p>", "\n", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+        cleaned = html.unescape(cleaned)
+        cleaned = re.sub(r"[ \t]+", " ", cleaned)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+        return cleaned.strip()
 
     def _extract_news_image_from_html(self, html_text: str) -> str | None:
         if not html_text:
@@ -2532,7 +2565,7 @@ class MoonlaunchrService:
             try:
                 response = requests.get(
                     article_url,
-                    timeout=12,
+                    timeout=20,
                     headers={"User-Agent": "moonlauncher/1.0 (+https://github.com/forgaw/moonlauncher)"},
                 )
                 response.raise_for_status()
@@ -2560,8 +2593,11 @@ class MoonlaunchrService:
             title = str(tile.get("title") or item.get("title") or "Minecraft News").strip() or "Minecraft News"
             body = str(tile.get("sub_header") or item.get("description") or item.get("summary") or "").strip()
             excerpt = (body or title)[:280]
-            direct_image_url = tile.get("image", {}).get("url") if isinstance(tile.get("image"), dict) else item.get("image")
-            url = self._normalize_news_url(tile.get("url") or item.get("url") or item.get("read_more_link"))
+            direct_image_url = (
+                tile.get("image", {}).get("url") if isinstance(tile.get("image"), dict)
+                else item.get("image") or item.get("imageUrl") or tile.get("imageUrl")
+            )
+            url = self._normalize_news_url(tile.get("url") or item.get("url") or item.get("read_more_link")) or "https://www.minecraft.net"
             category = str(item.get("article_type") or item.get("category") or "Minecraft").strip() or "Minecraft"
             published = str(item.get("publish_date") or item.get("published") or now_iso())
             image_url = self._resolve_news_image(direct_image_url, url, title, category)
@@ -2592,6 +2628,13 @@ class MoonlaunchrService:
         for index, item in enumerate(root.findall(".//item")[:limit]):
             title = (item.findtext("title") or "").strip() or "Minecraft News"
             description = (item.findtext("description") or "").strip()
+            encoded = (
+                item.findtext("{http://purl.org/rss/1.0/modules/content/}encoded")
+                or item.findtext("content:encoded")
+                or ""
+            ).strip()
+            raw_content = encoded or description or title
+            plain_content = self._strip_html(raw_content) or title
             link = self._normalize_news_url(item.findtext("link"))
             author = (item.findtext("author") or item.findtext("{http://purl.org/dc/elements/1.1/}creator") or "Minecraft").strip()
             pub_date_raw = (item.findtext("pubDate") or "").strip()
@@ -2637,8 +2680,8 @@ class MoonlaunchrService:
                 NewsArticle(
                     id=guid,
                     title=title,
-                    content=description or title,
-                    excerpt=(description or title)[:280],
+                    content=plain_content,
+                    excerpt=plain_content[:280],
                     author=author or "Minecraft",
                     publishDate=publish_date,
                     category=category,
@@ -2657,7 +2700,18 @@ class MoonlaunchrService:
             if (_utc_now() - cached_at).total_seconds() < 900 and cached_data:
                 return [item for item in cached_data if isinstance(item, NewsArticle)]
 
-        # 1) Official Mojang launcher news endpoint.
+        # 1) RF-friendly RSS source (has themed images and links).
+        try:
+            response = requests.get("https://minecraft-inside.ru/feed/", timeout=20)
+            response.raise_for_status()
+            articles = self._news_from_rss(response.text, limit=12)
+            if articles:
+                self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
+                return articles
+        except Exception:
+            pass
+
+        # 2) Official Mojang launcher news endpoint.
         try:
             response = requests.get("https://launchercontent.mojang.com/news.json", timeout=15)
             response.raise_for_status()
@@ -2670,7 +2724,7 @@ class MoonlaunchrService:
         except Exception:
             pass
 
-        # 2) minecraft-launcher-lib helper.
+        # 3) minecraft-launcher-lib helper.
         try:
             payload = minecraft_launcher_lib.utils.get_minecraft_news(page_size=12)
             if isinstance(payload, dict):
@@ -2681,14 +2735,14 @@ class MoonlaunchrService:
         except Exception:
             pass
 
-        # 3) Public Minecraft RSS fallback.
+        # 4) Public RSS fallbacks.
         rss_candidates = [
             "https://www.minecraft.net/en-us/feeds/community-content/rss",
             "https://www.minecraft.net/en-us/rss",
         ]
         for rss_url in rss_candidates:
             try:
-                response = requests.get(rss_url, timeout=15)
+                response = requests.get(rss_url, timeout=20)
                 response.raise_for_status()
                 articles = self._news_from_rss(response.text, limit=12)
                 if articles:

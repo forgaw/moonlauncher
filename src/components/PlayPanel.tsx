@@ -534,10 +534,10 @@ export function PlayPanel() {
                 </Button>
 
                 {isVersionMenuOpen && (
-                  <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-[260] w-72 rounded-xl border border-white/20 bg-gray-900/95 text-white p-1 shadow-2xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
+                  <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-[260] w-72 origin-bottom-left rounded-md border border-white/20 bg-gray-900/90 text-white p-1 shadow-md backdrop-blur-xl glass-button animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/10 transition-colors font-mojangles"
+                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/10 transition-colors font-mojangles"
                       onClick={() => {
                         setIsVersionMenuOpen(false)
                         void loadVersions()
@@ -549,7 +549,7 @@ export function PlayPanel() {
 
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-white/10 transition-colors font-mojangles"
+                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/10 transition-colors font-mojangles"
                       onClick={() => {
                         setIsVersionMenuOpen(false)
                         void openSelectedVersionFolder()
@@ -561,7 +561,7 @@ export function PlayPanel() {
 
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors font-mojangles disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10"
+                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors font-mojangles disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10"
                       onClick={() => {
                         setIsVersionMenuOpen(false)
                         void uninstallSelectedVersion()
