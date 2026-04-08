@@ -2560,22 +2560,6 @@ class MoonlaunchrService:
         normalized_direct = self._normalize_news_url(image_url, base_url=article_url or "https://www.minecraft.net")
         if normalized_direct:
             return normalized_direct
-
-        if article_url:
-            try:
-                response = requests.get(
-                    article_url,
-                    timeout=20,
-                    headers={"User-Agent": "moonlauncher/1.0 (+https://github.com/forgaw/moonlauncher)"},
-                )
-                response.raise_for_status()
-                extracted = self._extract_news_image_from_html(response.text)
-                normalized_extracted = self._normalize_news_url(extracted, base_url=article_url)
-                if normalized_extracted:
-                    return normalized_extracted
-            except Exception:
-                pass
-
         return self._news_image_fallback(title=title, category=category)
 
     def _news_from_mojang_payload(self, payload: dict[str, Any], limit: int = 12) -> list[NewsArticle]:
@@ -2693,6 +2677,45 @@ class MoonlaunchrService:
             )
         return output
 
+    def _parse_news_datetime(self, value: str) -> datetime:
+        candidate = str(value or "").strip()
+        if not candidate:
+            return datetime.fromtimestamp(0, tz=timezone.utc)
+
+        try:
+            dt = parsedate_to_datetime(candidate)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            pass
+
+        iso_candidate = candidate.replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(iso_candidate)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            return datetime.fromtimestamp(0, tz=timezone.utc)
+
+    def _dedupe_news(self, articles: list[NewsArticle]) -> list[NewsArticle]:
+        deduped: list[NewsArticle] = []
+        seen: set[str] = set()
+        for article in articles:
+            key_url = str(article.url or "").strip().lower()
+            key_title = str(article.title or "").strip().lower()
+            key_date = str(article.publishDate or "").strip()
+            key = f"{key_url}|{key_title}|{key_date}"
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(article)
+        return deduped
+
+    def _sort_news_desc(self, articles: list[NewsArticle]) -> list[NewsArticle]:
+        return sorted(articles, key=lambda article: self._parse_news_datetime(article.publishDate), reverse=True)
+
     def get_news(self) -> list[NewsArticle]:
         cached_at = self.news_cache.get("fetchedAt")
         cached_data = self.news_cache.get("data")
@@ -2700,56 +2723,68 @@ class MoonlaunchrService:
             if (_utc_now() - cached_at).total_seconds() < 900 and cached_data:
                 return [item for item in cached_data if isinstance(item, NewsArticle)]
 
-        # 1) RF-friendly RSS source (has themed images and links).
+        official_articles: list[NewsArticle] = []
+        community_articles: list[NewsArticle] = []
+
+        # 1) RF-friendly source.
         try:
-            response = requests.get("https://minecraft-inside.ru/feed/", timeout=20)
+            response = requests.get("https://minecraft-inside.ru/feed/", timeout=8)
             response.raise_for_status()
-            articles = self._news_from_rss(response.text, limit=12)
-            if articles:
-                self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
-                return articles
+            articles = self._news_from_rss(response.text, limit=140)
+            for article in articles:
+                if not str(article.author or "").strip():
+                    article.author = "Minecraft Inside"
+                if str(article.category or "").strip().lower() == "minecraft":
+                    article.category = "Сообщество"
+            community_articles.extend(articles)
         except Exception:
             pass
 
         # 2) Official Mojang launcher news endpoint.
         try:
-            response = requests.get("https://launchercontent.mojang.com/news.json", timeout=15)
+            response = requests.get("https://launchercontent.mojang.com/news.json", timeout=8)
             response.raise_for_status()
             payload = response.json()
             if isinstance(payload, dict):
-                articles = self._news_from_mojang_payload(payload, limit=12)
-                if articles:
-                    self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
-                    return articles
+                articles = self._news_from_mojang_payload(payload, limit=80)
+                for article in articles:
+                    article.author = "Minecraft"
+                    if str(article.category or "").strip().lower() == "minecraft":
+                        article.category = "Обновления"
+                official_articles.extend(articles)
         except Exception:
             pass
 
-        # 3) minecraft-launcher-lib helper.
-        try:
-            payload = minecraft_launcher_lib.utils.get_minecraft_news(page_size=12)
-            if isinstance(payload, dict):
-                articles = self._news_from_mojang_payload(payload, limit=12)
-                if articles:
-                    self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
-                    return articles
-        except Exception:
-            pass
-
-        # 4) Public RSS fallbacks.
+        # 3) Public RSS fallbacks.
         rss_candidates = [
             "https://www.minecraft.net/en-us/feeds/community-content/rss",
             "https://www.minecraft.net/en-us/rss",
         ]
         for rss_url in rss_candidates:
             try:
-                response = requests.get(rss_url, timeout=20)
+                response = requests.get(rss_url, timeout=8)
                 response.raise_for_status()
-                articles = self._news_from_rss(response.text, limit=12)
-                if articles:
-                    self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
-                    return articles
+                articles = self._news_from_rss(response.text, limit=80)
+                for article in articles:
+                    if not str(article.author or "").strip():
+                        article.author = "Minecraft"
+                    if str(article.category or "").strip().lower() == "minecraft":
+                        article.category = "Обновления"
+                official_articles.extend(articles)
             except Exception:
                 continue
+
+        combined = self._dedupe_news(official_articles + community_articles)
+        combined = self._sort_news_desc(combined)
+
+        # Keep a balance: if the top slice has no official update news, inject the newest official article.
+        if combined and not any(item in official_articles for item in combined[:12]) and official_articles:
+            newest_official = self._sort_news_desc(self._dedupe_news(official_articles))[0]
+            combined = [newest_official] + [item for item in combined if item.id != newest_official.id]
+
+        if combined:
+            self.news_cache = {"fetchedAt": _utc_now(), "data": combined}
+            return combined
 
         fallback = [
             NewsArticle(

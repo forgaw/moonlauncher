@@ -17,6 +17,11 @@ Moonlauncher — локальный лаунчер Minecraft с современ
 : файл `PRIVACY_POLICY.md`
 : API `GET /api/privacy-policy` и `GET /privacy-policy`
 
+### Системные требования
+- Кратко: Windows 10/11 x64, WebView2 Runtime, 4 GB RAM минимум.
+- Подробно:
+: файл `SYSTEM_REQUIREMENTS.md`
+
 ### Быстрый запуск (dev)
 ```powershell
 .\moonlaunchr_loader.ps1
@@ -82,9 +87,14 @@ Output: `installer\release\moonlauncher`
 
 ### Build MSI
 ```powershell
-.\installer\build_msi.ps1 -Configuration Release -Version 1.0.22
+.\installer\build_msi.ps1 -Configuration Release -Version 1.0.26
 ```
-Output: `installer\dist\moonlauncher-1.0.22-x64.msi`
+Output: `installer\dist\moonlauncher-1.0.26-x64.msi`
+
+### System requirements
+- Short: Windows 10/11 x64, WebView2 Runtime, 4 GB RAM minimum.
+- Full details:
+: file `SYSTEM_REQUIREMENTS.md`
 
 ### Java Agent (optional)
 ```powershell

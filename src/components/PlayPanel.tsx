@@ -7,6 +7,7 @@ import { Input } from "./ui/input"
 import { Progress } from "./ui/progress"
 import { Badge } from "./ui/badge"
 import { Alert, AlertDescription } from "./ui/alert"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
 import { backendService, type GameVersion, type LaunchOptions, type PlayerStats } from "../services/backend"
 import minecraftBackground from "figma:asset/c80877b64f6066aa2903984efb421fe249bbada5.png"
 import appAvatar from "../assets/moonlauncher-avatar.png"
@@ -94,7 +95,6 @@ export function PlayPanel() {
   const [isVersionMenuOpen, setIsVersionMenuOpen] = useState(false)
   const versionsRef = useRef<GameVersion[]>([])
   const settingsRef = useRef<LauncherSettings>({})
-  const versionMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     versionsRef.current = versions
@@ -205,32 +205,6 @@ export function PlayPanel() {
     }, 3000)
     return () => window.clearInterval(intervalId)
   }, [processId, loadPlayerStats])
-
-  useEffect(() => {
-    if (!isVersionMenuOpen) return
-
-    const closeOnOutsideClick = (event: PointerEvent) => {
-      const target = event.target as Node | null
-      if (!target) return
-      if (versionMenuRef.current && !versionMenuRef.current.contains(target)) {
-        setIsVersionMenuOpen(false)
-      }
-    }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsVersionMenuOpen(false)
-      }
-    }
-
-    document.addEventListener("pointerdown", closeOnOutsideClick)
-    document.addEventListener("keydown", closeOnEscape)
-
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsideClick)
-      document.removeEventListener("keydown", closeOnEscape)
-    }
-  }, [isVersionMenuOpen])
 
   useEffect(() => {
     if (isLaunching) {
@@ -520,60 +494,63 @@ export function PlayPanel() {
                 Папка игры
               </Button>
 
-              <div className="relative" ref={versionMenuRef}>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="glass-button border-white/20 text-white hover:bg-white/10 backdrop-blur-sm h-10 w-10"
-                  onClick={() => setIsVersionMenuOpen(prev => !prev)}
-                  disabled={isLaunching}
-                  aria-label="Параметры версии"
-                  aria-expanded={isVersionMenuOpen}
+              <Popover open={isVersionMenuOpen} onOpenChange={setIsVersionMenuOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="glass-button border-white/20 text-white hover:bg-white/10 backdrop-blur-sm h-10 w-10"
+                    disabled={isLaunching}
+                    aria-label="Параметры версии"
+                    aria-expanded={isVersionMenuOpen}
+                  >
+                    <Settings2 className="size-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  side="top"
+                  align="start"
+                  sideOffset={8}
+                  className="z-[320] w-72 p-1 rounded-md border-white/20 bg-gray-900/90 text-white shadow-md backdrop-blur-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200"
                 >
-                  <Settings2 className="size-4" />
-                </Button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/10 transition-colors font-mojangles"
+                    onClick={() => {
+                      setIsVersionMenuOpen(false)
+                      void loadVersions()
+                    }}
+                  >
+                    <RefreshCw className="size-4" />
+                    Обновить список версий
+                  </button>
 
-                {isVersionMenuOpen && (
-                  <div className="absolute bottom-[calc(100%+0.5rem)] left-0 z-[260] w-72 origin-bottom-left rounded-md border border-white/20 bg-gray-900/90 text-white p-1 shadow-md backdrop-blur-xl glass-button animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-                    <button
-                      type="button"
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/10 transition-colors font-mojangles"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false)
-                        void loadVersions()
-                      }}
-                    >
-                      <RefreshCw className="size-4" />
-                      Обновить список версий
-                    </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/10 transition-colors font-mojangles"
+                    onClick={() => {
+                      setIsVersionMenuOpen(false)
+                      void openSelectedVersionFolder()
+                    }}
+                  >
+                    <FolderOpen className="size-4" />
+                    Открыть папку версии
+                  </button>
 
-                    <button
-                      type="button"
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-white/10 transition-colors font-mojangles"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false)
-                        void openSelectedVersionFolder()
-                      }}
-                    >
-                      <FolderOpen className="size-4" />
-                      Открыть папку версии
-                    </button>
-
-                    <button
-                      type="button"
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors font-mojangles disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false)
-                        void uninstallSelectedVersion()
-                      }}
-                      disabled={!selectedVersionData || !selectedVersionData.installed || selectedVersionData.type === "modpack"}
-                    >
-                      <Trash2 className="size-4" />
-                      Удалить выбранную версию
-                    </button>
-                  </div>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors font-mojangles disabled:opacity-50 disabled:cursor-not-allowed hover:bg-white/10"
+                    onClick={() => {
+                      setIsVersionMenuOpen(false)
+                      void uninstallSelectedVersion()
+                    }}
+                    disabled={!selectedVersionData || !selectedVersionData.installed || selectedVersionData.type === "modpack"}
+                  >
+                    <Trash2 className="size-4" />
+                    Удалить выбранную версию
+                  </button>
+                </PopoverContent>
+              </Popover>
 
               <div className="relative flex items-center ml-2">
                 {isLaunching ? (
