@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -15,9 +16,11 @@ import random
 import string
 import time
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
+from xml.etree import ElementTree
 
 import minecraft_launcher_lib
 import requests
@@ -123,6 +126,7 @@ class MoonlaunchrService:
         self.optifine_cache: dict[str, Any] = {"fetchedAt": None, "data": {}}
         self.available_versions_cache: dict[str, Any] = {"fetchedAt": None, "data": []}
         self.version_manifest_cache: dict[str, Any] = {"fetchedAt": None, "payload": {}}
+        self.news_cache: dict[str, Any] = {"fetchedAt": None, "data": []}
 
         self.settings = self._load_settings()
         self._apply_proxy_settings()
@@ -179,6 +183,7 @@ class MoonlaunchrService:
             "curseforgeApiKeyEncrypted": "",
             "preferredServerAddress": "",
             "selectedProfileId": "default",
+            "selectedVersionId": "",
             "coopServerMemoryMb": 2048,
             "coopServerPort": 25565,
             "elyBySkinSync": True,
@@ -2482,51 +2487,233 @@ class MoonlaunchrService:
                 motd="Сервер недоступен",
             )
 
-    def get_news(self) -> list[NewsArticle]:
-        try:
-            payload = minecraft_launcher_lib.utils.get_minecraft_news(page_size=10)
-            raw_items = payload.get("article_grid", []) if isinstance(payload, dict) else []
-            output: list[NewsArticle] = []
-            for index, item in enumerate(raw_items):
-                title = str(item.get("default_tile", {}).get("title", "Новости Minecraft"))
-                body = str(item.get("default_tile", {}).get("sub_header", ""))
-                excerpt = body or title
-                image_url = item.get("default_tile", {}).get("image", {}).get("url")
-                category = str(item.get("article_type", "Новости"))
-                published = str(item.get("publish_date") or now_iso())
-                output.append(
-                    NewsArticle(
-                        id=str(item.get("id", f"news-{index}")),
-                        title=title,
-                        content=body or title,
-                        excerpt=excerpt[:240],
-                        author="Команда Minecraft",
-                        publishDate=published,
-                        category=category,
-                        tags=[category],
-                        imageUrl=image_url if isinstance(image_url, str) else None,
-                        featured=index == 0,
-                    )
+    def _normalize_news_url(self, value: Any, base_url: str = "https://www.minecraft.net") -> str | None:
+        candidate = str(value or "").strip()
+        if not candidate:
+            return None
+        if candidate.startswith("//"):
+            return f"https:{candidate}"
+        lowered = candidate.lower()
+        if lowered.startswith("http://") or lowered.startswith("https://"):
+            return candidate
+        return urljoin(base_url if base_url.endswith("/") else f"{base_url}/", candidate)
+
+    def _news_image_fallback(self, title: str, category: str) -> str:
+        normalized = re.sub(r"[^a-zA-Z0-9а-яА-ЯёЁ]+", " ", f"{title} {category} minecraft").strip()
+        words = [word for word in normalized.split() if len(word) > 2][:6]
+        query = quote(" ".join(words) or "minecraft game")
+        signature = int(hashlib.sha1(normalized.encode("utf-8", errors="ignore")).hexdigest()[:8], 16) % 1000
+        return f"https://source.unsplash.com/1280x720/?{query}&sig={signature}"
+
+    def _extract_news_image_from_html(self, html_text: str) -> str | None:
+        if not html_text:
+            return None
+        patterns = (
+            r'<meta[^>]+(?:property|name)=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']og:image["\']',
+            r'<meta[^>]+(?:property|name)=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\']twitter:image["\']',
+            r'<img[^>]+src=["\']([^"\']+)["\'][^>]*>',
+        )
+        for pattern in patterns:
+            match = re.search(pattern, html_text, flags=re.IGNORECASE)
+            if match:
+                candidate = html.unescape(str(match.group(1) or "").strip())
+                if candidate:
+                    return candidate
+        return None
+
+    def _resolve_news_image(self, image_url: Any, article_url: str | None, title: str, category: str) -> str:
+        normalized_direct = self._normalize_news_url(image_url, base_url=article_url or "https://www.minecraft.net")
+        if normalized_direct:
+            return normalized_direct
+
+        if article_url:
+            try:
+                response = requests.get(
+                    article_url,
+                    timeout=12,
+                    headers={"User-Agent": "moonlauncher/1.0 (+https://github.com/forgaw/moonlauncher)"},
                 )
-            if output:
-                return output
+                response.raise_for_status()
+                extracted = self._extract_news_image_from_html(response.text)
+                normalized_extracted = self._normalize_news_url(extracted, base_url=article_url)
+                if normalized_extracted:
+                    return normalized_extracted
+            except Exception:
+                pass
+
+        return self._news_image_fallback(title=title, category=category)
+
+    def _news_from_mojang_payload(self, payload: dict[str, Any], limit: int = 12) -> list[NewsArticle]:
+        raw_items: list[dict[str, Any]] = []
+        for key in ("article_grid", "entries", "news", "items"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                raw_items = [item for item in value if isinstance(item, dict)]
+                if raw_items:
+                    break
+
+        output: list[NewsArticle] = []
+        for index, item in enumerate(raw_items[:limit]):
+            tile = item.get("default_tile") if isinstance(item.get("default_tile"), dict) else {}
+            title = str(tile.get("title") or item.get("title") or "Minecraft News").strip() or "Minecraft News"
+            body = str(tile.get("sub_header") or item.get("description") or item.get("summary") or "").strip()
+            excerpt = (body or title)[:280]
+            direct_image_url = tile.get("image", {}).get("url") if isinstance(tile.get("image"), dict) else item.get("image")
+            url = self._normalize_news_url(tile.get("url") or item.get("url") or item.get("read_more_link"))
+            category = str(item.get("article_type") or item.get("category") or "Minecraft").strip() or "Minecraft"
+            published = str(item.get("publish_date") or item.get("published") or now_iso())
+            image_url = self._resolve_news_image(direct_image_url, url, title, category)
+            output.append(
+                NewsArticle(
+                    id=str(item.get("id") or f"mc-news-{index}"),
+                    title=title,
+                    content=body or title,
+                    excerpt=excerpt,
+                    author="Minecraft",
+                    publishDate=published,
+                    category=category,
+                    tags=[category],
+                    imageUrl=image_url,
+                    url=url,
+                    featured=index == 0,
+                )
+            )
+        return output
+
+    def _news_from_rss(self, xml_text: str, limit: int = 12) -> list[NewsArticle]:
+        xml_text = str(xml_text or "").strip()
+        if not xml_text:
+            return []
+        root = ElementTree.fromstring(xml_text)
+
+        output: list[NewsArticle] = []
+        for index, item in enumerate(root.findall(".//item")[:limit]):
+            title = (item.findtext("title") or "").strip() or "Minecraft News"
+            description = (item.findtext("description") or "").strip()
+            link = self._normalize_news_url(item.findtext("link"))
+            author = (item.findtext("author") or item.findtext("{http://purl.org/dc/elements/1.1/}creator") or "Minecraft").strip()
+            pub_date_raw = (item.findtext("pubDate") or "").strip()
+            category = (item.findtext("category") or "Minecraft").strip() or "Minecraft"
+            guid = (item.findtext("guid") or "").strip() or f"rss-news-{index}"
+
+            publish_date = now_iso()
+            if pub_date_raw:
+                try:
+                    publish_date = parsedate_to_datetime(pub_date_raw).astimezone(timezone.utc).isoformat()
+                except Exception:
+                    publish_date = pub_date_raw
+
+            image_url = None
+            enclosure = item.find("enclosure")
+            if enclosure is not None and isinstance(enclosure.attrib, dict):
+                candidate = str(enclosure.attrib.get("url") or "").strip()
+                if candidate:
+                    image_url = candidate
+
+            if not image_url:
+                media = item.find("{http://search.yahoo.com/mrss/}content")
+                if media is not None and isinstance(media.attrib, dict):
+                    candidate = str(media.attrib.get("url") or "").strip()
+                    if candidate:
+                        image_url = candidate
+
+            if not image_url:
+                media_thumbnail = item.find("{http://search.yahoo.com/mrss/}thumbnail")
+                if media_thumbnail is not None and isinstance(media_thumbnail.attrib, dict):
+                    candidate = str(media_thumbnail.attrib.get("url") or "").strip()
+                    if candidate:
+                        image_url = candidate
+
+            if not image_url and description:
+                description_image = self._extract_news_image_from_html(description)
+                if description_image:
+                    image_url = description_image
+
+            resolved_image = self._resolve_news_image(image_url, link, title, category)
+
+            output.append(
+                NewsArticle(
+                    id=guid,
+                    title=title,
+                    content=description or title,
+                    excerpt=(description or title)[:280],
+                    author=author or "Minecraft",
+                    publishDate=publish_date,
+                    category=category,
+                    tags=[category],
+                    imageUrl=resolved_image,
+                    url=link,
+                    featured=index == 0,
+                )
+            )
+        return output
+
+    def get_news(self) -> list[NewsArticle]:
+        cached_at = self.news_cache.get("fetchedAt")
+        cached_data = self.news_cache.get("data")
+        if isinstance(cached_at, datetime) and isinstance(cached_data, list):
+            if (_utc_now() - cached_at).total_seconds() < 900 and cached_data:
+                return [item for item in cached_data if isinstance(item, NewsArticle)]
+
+        # 1) Official Mojang launcher news endpoint.
+        try:
+            response = requests.get("https://launchercontent.mojang.com/news.json", timeout=15)
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, dict):
+                articles = self._news_from_mojang_payload(payload, limit=12)
+                if articles:
+                    self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
+                    return articles
         except Exception:
             pass
 
-        return [
+        # 2) minecraft-launcher-lib helper.
+        try:
+            payload = minecraft_launcher_lib.utils.get_minecraft_news(page_size=12)
+            if isinstance(payload, dict):
+                articles = self._news_from_mojang_payload(payload, limit=12)
+                if articles:
+                    self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
+                    return articles
+        except Exception:
+            pass
+
+        # 3) Public Minecraft RSS fallback.
+        rss_candidates = [
+            "https://www.minecraft.net/en-us/feeds/community-content/rss",
+            "https://www.minecraft.net/en-us/rss",
+        ]
+        for rss_url in rss_candidates:
+            try:
+                response = requests.get(rss_url, timeout=15)
+                response.raise_for_status()
+                articles = self._news_from_rss(response.text, limit=12)
+                if articles:
+                    self.news_cache = {"fetchedAt": _utc_now(), "data": articles}
+                    return articles
+            except Exception:
+                continue
+
+        fallback = [
             NewsArticle(
                 id="fallback-news",
-                title="Moonlauncher готов к работе",
-                content="Новости Minecraft временно недоступны, но функции лаунчера работают.",
-                excerpt="Новости Minecraft временно недоступны, но функции лаунчера работают.",
+                title="Новости Minecraft временно недоступны",
+                content="Не удалось загрузить новости из внешних источников. Попробуйте обновить позже.",
+                excerpt="Не удалось загрузить новости из внешних источников. Попробуйте обновить позже.",
                 author="moonlauncher",
                 publishDate=now_iso(),
                 category="Новости",
                 tags=["launcher"],
                 imageUrl=None,
+                url="https://www.minecraft.net",
                 featured=True,
             )
         ]
+        self.news_cache = {"fetchedAt": _utc_now(), "data": fallback}
+        return fallback
     def _modrinth_headers(self) -> dict[str, str]:
         token = self._resolve_secret("modrinthApiKey", "modrinthApiKeyEncrypted")
         headers = {"User-Agent": "moonlauncher/1.0.0 (support@moonlauncher.local)"}
@@ -4002,3 +4189,4 @@ class MoonlaunchrService:
             "error": self.discord_last_error,
             "clientId": str(self.settings.get("discordClientId") or ""),
         }
+

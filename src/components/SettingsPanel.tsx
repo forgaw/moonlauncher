@@ -1,5 +1,5 @@
 ﻿import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react"
-import { Save, RefreshCw, Monitor, Cpu, Folder, AlertCircle, Shield, FolderOpen, Palette, Paintbrush, Upload, Eraser, ArrowUp, ArrowDown } from "lucide-react"
+import { Save, RefreshCw, Monitor, Cpu, Folder, AlertCircle, Shield, FolderOpen, Palette, Paintbrush, Upload, Eraser, ArrowUp, ArrowDown, Github, Send } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
 import { Label } from "./ui/label"
@@ -785,6 +785,25 @@ export function SettingsPanel() {
                       onChange={event => updateSetting("runtimeOptimizerArgs", event.target.value)}
                       placeholder="fastMath=true;entityTick=true;allocationCache=true;network=true;verbose=false"
                     />
+                  </div>
+                </div>
+                <div className="space-y-2 rounded-xl border border-white/10 p-3 bg-black/20">
+                  <Label>Ссылки проекта</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open("https://github.com/forgaw/moonlauncher", "_blank", "noopener,noreferrer")}
+                    >
+                      <Github className="size-4 mr-2" />
+                      GitHub репозиторий
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open("https://t.me/supchating", "_blank", "noopener,noreferrer")}
+                    >
+                      <Send className="size-4 mr-2" />
+                      Telegram
+                    </Button>
                   </div>
                 </div>
                 <Button variant="outline" onClick={() => window.open(`${backendService.getConfig().baseUrl}/privacy-policy`, "_blank")}>

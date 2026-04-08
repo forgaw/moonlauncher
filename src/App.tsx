@@ -171,6 +171,16 @@ export default function App() {
   }, [loadThemeSettings])
 
   useEffect(() => {
+    const blockContextMenu = (event: MouseEvent) => {
+      event.preventDefault()
+    }
+    document.addEventListener("contextmenu", blockContextMenu)
+    return () => {
+      document.removeEventListener("contextmenu", blockContextMenu)
+    }
+  }, [])
+
+  useEffect(() => {
     applyTheme(theme)
   }, [applyTheme, theme])
 

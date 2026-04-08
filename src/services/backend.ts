@@ -75,6 +75,7 @@ export interface NewsArticle {
   category: string
   tags: string[]
   imageUrl?: string
+  url?: string
   featured: boolean
 }
 

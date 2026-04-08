@@ -74,6 +74,7 @@ class NewsArticle(BaseModel):
     category: str
     tags: list[str] = Field(default_factory=list)
     imageUrl: str | None = None
+    url: str | None = None
     featured: bool = False
 
 

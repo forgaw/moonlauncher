@@ -146,6 +146,15 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-mojangles);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
   }
 }
 
@@ -248,6 +257,7 @@ html {
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
     transition: left 0.5s ease;
+    pointer-events: none;
   }
 
   .glass-button:hover::before {
