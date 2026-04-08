@@ -1,0 +1,7 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+minecraft-launcher-lib==8.0
+mcstatus==11.1.1
+requests==2.32.3
+psutil==6.1.0
+pypresence==4.3.0

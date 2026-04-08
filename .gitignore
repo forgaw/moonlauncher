@@ -1,0 +1,74 @@
+﻿# ============================================
+# RU: Gitignore для Moonlauncher
+# EN: Gitignore for Moonlauncher
+# ============================================
+
+# RU: Node.js зависимости и кэш
+# EN: Node.js dependencies and cache
+node_modules/
+.npm/
+.pnpm-store/
+
+# RU: Сборки и временные артефакты
+# EN: Build outputs and temporary artifacts
+build/
+dist/
+*.tsbuildinfo
+
+# RU: Логи
+# EN: Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# RU: Python (FastAPI backend)
+# EN: Python (FastAPI backend)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# RU: .NET / C#
+# EN: .NET / C#
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# RU: Java / Maven (agent)
+# EN: Java / Maven (agent)
+target/
+.gradle/
+
+# RU: Артефакты установщика
+# EN: Installer artifacts
+installer/release/
+installer/dist/
+
+# RU: Секреты и локальные env файлы
+# EN: Secrets and local env files
+.env
+.env.*
+!.env.example
+
+# RU: IDE / редакторы
+# EN: IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# RU: Системные файлы ОС
+# EN: OS metadata files
+.DS_Store
+Thumbs.db
+Desktop.ini
