@@ -27,14 +27,14 @@ import requests
 from mcstatus import JavaServer
 
 try:
-    import psutil  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
+    import psutil                
+except Exception:                                          
     psutil = None
 
 try:
-    from pypresence import Presence  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    Presence = None  # type: ignore[assignment]
+    from pypresence import Presence                
+except Exception:                                          
+    Presence = None                            
 
 from .models import (
     ContentInstallRequest,
@@ -103,7 +103,7 @@ class MoonlaunchrService:
         self.appdata_root = Path(appdata) if appdata else user_home
         self.project_root = Path(__file__).resolve().parents[2]
 
-        # Keep launcher data in a visible user folder instead of hidden AppData.
+                                                                                
         self.state_root = user_home / "Moonlauncher"
         self.state_root.mkdir(parents=True, exist_ok=True)
         self.files_root = self.state_root / "state"
@@ -475,7 +475,7 @@ class MoonlaunchrService:
                         self.create_world_backup(world_name=None, source="scheduler")
                         self.last_scheduled_backup_at = _utc_now().isoformat()
             except Exception:
-                # Scheduler should never crash the backend.
+                                                           
                 pass
             time.sleep(30)
 
@@ -535,13 +535,13 @@ class MoonlaunchrService:
 
         try:
             if os.name == "nt":
-                os.startfile(str(folder))  # type: ignore[attr-defined]
+                os.startfile(str(folder))                              
             elif shutil.which("xdg-open"):
                 subprocess.Popen(["xdg-open", str(folder)])
             elif shutil.which("open"):
                 subprocess.Popen(["open", str(folder)])
         except Exception:
-            # Not fatal, we still return the resolved path.
+                                                           
             pass
 
         return str(folder)
@@ -576,7 +576,7 @@ class MoonlaunchrService:
             if version_match:
                 return self._parse_java_major(version_match.group(1))
 
-            # Some builds can print just "openjdk 21 ..."
+                                                         
             short_match = re.search(r"(?:openjdk|java)\s+(\d[\d._]*)", output, flags=re.IGNORECASE)
             if short_match:
                 return self._parse_java_major(short_match.group(1))
@@ -1344,7 +1344,7 @@ class MoonlaunchrService:
                     skin_url = str(ely_profile.get("skinUrl") or "")
                     cape_url = str(ely_profile.get("capeUrl") or "")
                 except Exception:
-                    # Friend stays manual if Ely.by profile is unavailable.
+                                                                           
                     source = "manual"
 
             friend = {
@@ -1482,7 +1482,7 @@ class MoonlaunchrService:
         if not executable:
             raise ValueError("Radmin VPN не установлен")
         try:
-            os.startfile(executable)  # type: ignore[attr-defined]
+            os.startfile(executable)                              
         except Exception as exc:
             raise ValueError(str(exc)) from exc
 
@@ -1495,7 +1495,7 @@ class MoonlaunchrService:
 
         if installed_path:
             try:
-                os.startfile(installed_path)  # type: ignore[attr-defined]
+                os.startfile(installed_path)                              
             except Exception:
                 pass
 
@@ -2521,7 +2521,6 @@ class MoonlaunchrService:
         return payload if isinstance(payload, dict) else {}
 
     def _news_image_fallback(self, title: str, category: str) -> str:
-        # Local deterministic fallback to avoid random/non-themed images when remote hosts fail.
         title_clean = re.sub(r"\s+", " ", str(title or "").strip())[:42] or "Minecraft News"
         category_clean = re.sub(r"\s+", " ", str(category or "").strip())[:24] or "Minecraft"
         palette = [
@@ -2876,7 +2875,6 @@ class MoonlaunchrService:
         official_articles: list[NewsArticle] = []
         community_articles: list[NewsArticle] = []
 
-        # 1) Official Mojang launcher endpoint (stable image + date fields).
         try:
             payload = self._fetch_news_json("https://launchercontent.mojang.com/news.json", timeout=10)
             if payload:
@@ -2892,7 +2890,6 @@ class MoonlaunchrService:
         except Exception:
             pass
 
-        # 2) Official community RSS fallback.
         rss_candidates = [
             "https://www.minecraft.net/en-us/feeds/community-content/rss",
         ]
@@ -2915,7 +2912,6 @@ class MoonlaunchrService:
         combined = self._dedupe_news(official_articles + community_articles)
         combined = self._sort_news_desc(combined)
 
-        # Keep a balance: if the top slice has no official update news, inject the newest official article.
         if combined and not any(item in official_articles for item in combined[:12]) and official_articles:
             newest_official = self._sort_news_desc(self._dedupe_news(official_articles))[0]
             combined = [newest_official] + [item for item in combined if item.id != newest_official.id]
@@ -3094,7 +3090,7 @@ class MoonlaunchrService:
         return str(target)
 
     def _curseforge_class_id(self, kind: ContentKind) -> int | None:
-        # 6 = mods, 4471 = modpacks, 12 = resource packs, 6552 = shaders, 17 = worlds/maps.
+                                                                                           
         mapping: dict[ContentKind, int] = {
             "mod": 6,
             "modpack": 4471,
@@ -3119,7 +3115,7 @@ class MoonlaunchrService:
         if kind == "mod" and loader:
             facets.append([f"categories:{loader}"])
         if kind == "map":
-            # Reduce irrelevant modpack results in map mode.
+                                                            
             facets.append(
                 [
                     "categories:adventure",
@@ -3395,7 +3391,7 @@ class MoonlaunchrService:
                 )
                 description_response.raise_for_status()
                 description_html = str(description_response.json().get("data") or "")
-                # Compact HTML-to-text fallback.
+                                                
                 plain = re.sub(r"<[^>]+>", " ", description_html)
                 plain = re.sub(r"\s+", " ", plain).strip()
                 if plain:
@@ -3599,7 +3595,7 @@ class MoonlaunchrService:
         )
         return ModInstallResponse(fileName=response.fileName, installedTo=response.installedTo, sourceUrl=response.sourceUrl)
 
-    # ----- Backup / Restore -----
+                                  
     def _sanitize_name(self, value: str, fallback: str = "item") -> str:
         cleaned = re.sub(r"[^a-zA-Z0-9._ -]+", "_", str(value or "").strip())
         cleaned = cleaned.strip(" .")
@@ -3703,7 +3699,7 @@ class MoonlaunchrService:
 
         return {"ok": True, "backupId": backup_file.name, "restoredWorlds": restored_worlds}
 
-    # ----- Logs -----
+                      
     def _candidate_log_paths(self) -> list[Path]:
         candidates: list[Path] = []
         patterns = [
@@ -3827,7 +3823,7 @@ class MoonlaunchrService:
         report_path.write_text(report_text, encoding="utf-8")
         return {"path": str(report_path), "name": report_path.name, "content": report_text}
 
-    # ----- Monitor -----
+                         
     def _memory_snapshot(self) -> tuple[int, int]:
         if psutil:
             try:
@@ -3879,7 +3875,7 @@ class MoonlaunchrService:
             "fps": None,
         }
 
-    # ----- Mods Integrity / Conflicts -----
+                                            
     def analyze_mod_conflicts(self, loader: str = "fabric") -> dict[str, Any]:
         mods_dir = self.minecraft_directory / "mods"
         mods_dir.mkdir(parents=True, exist_ok=True)
@@ -3994,7 +3990,7 @@ class MoonlaunchrService:
             "isClean": not (missing or added or changed),
         }
 
-    # ----- Updater -----
+                         
     def _launcher_history(self) -> list[dict[str, Any]]:
         raw = self._read_json(self.launcher_history_path, [])
         return raw if isinstance(raw, list) else []
@@ -4107,7 +4103,7 @@ class MoonlaunchrService:
             subprocess.Popen(["msiexec", "/i", installer_path], cwd=str(Path(installer_path).parent))
         return {"ok": True, "rollbackVersion": previous_version, "installerPath": installer_path}
 
-    # ----- Java Profiles -----
+                               
     def get_java_profiles(self) -> dict[str, Any]:
         return {
             "useJavaProfiles": bool(self.settings.get("useJavaProfiles", True)),
@@ -4124,7 +4120,7 @@ class MoonlaunchrService:
         self._save_settings()
         return self.get_java_profiles()
 
-    # ----- Moon Packs / Custom Modpacks -----
+                                              
     def get_moon_packs(self) -> list[dict[str, Any]]:
         return [
             {
@@ -4362,7 +4358,7 @@ class MoonlaunchrService:
             result["applyResult"] = self.apply_custom_pack(output.name, wipe_existing=False)
         return result
 
-    # ----- Discord Rich Presence -----
+                                       
     def _ensure_discord_rpc(self) -> None:
         if not bool(self.settings.get("discordRichPresence", False)):
             return

@@ -527,8 +527,8 @@ def search_content(
     try:
         projects = service.search_content(
             query=query,
-            kind=kind,  # type: ignore[arg-type]
-            provider=provider,  # type: ignore[arg-type]
+            kind=kind,
+            provider=provider,
             game_version=gameVersion,
             loader=loader,
             limit=limit,
@@ -550,7 +550,7 @@ def content_recommendations(
 ) -> list[dict[str, Any]]:
     try:
         projects = service.get_recommended_content(
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
             provider=provider,
             game_version=gameVersion,
             loader=loader,
@@ -573,7 +573,7 @@ def content_details(
         return service.get_content_details(
             project_id=projectId,
             provider=provider,
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -584,7 +584,7 @@ def content_details(
 @app.get("/api/content/installed")
 def installed_content(kind: str = Query(default="mod")) -> list[dict[str, Any]]:
     try:
-        return service.get_installed_content(kind=kind)  # type: ignore[arg-type]
+        return service.get_installed_content(kind=kind)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -595,7 +595,7 @@ def installed_content(kind: str = Query(default="mod")) -> list[dict[str, Any]]:
 def delete_installed_content(kind: str, entry_name: str) -> dict[str, Any]:
     try:
         deleted = service.remove_installed_content(
-            kind=kind,  # type: ignore[arg-type]
+            kind=kind,
             entry_name=entry_name,
         )
         return {"ok": True, "deleted": deleted}

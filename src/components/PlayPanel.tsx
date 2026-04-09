@@ -250,9 +250,7 @@ export function PlayPanel() {
           settingsRef.current = { ...settingsRef.current, selectedVersionId: selectedVersion }
           setLauncherSettings(prev => ({ ...prev, selectedVersionId: selectedVersion }))
         })
-        .catch(() => {
-          // Keep launch UX stable if persisting choice fails.
-        })
+        .catch(() => {})
     }, 280)
 
     return () => window.clearTimeout(timeoutId)
@@ -368,9 +366,7 @@ export function PlayPanel() {
         const latestSettings = await backendService.getSettings()
         setLauncherSettings(latestSettings)
         effectiveSettings = { ...launcherSettings, ...latestSettings }
-      } catch {
-        // Launch continues using current in-memory settings.
-      }
+      } catch {}
 
       const launchOptions: LaunchOptions = {
         profileId: "",
@@ -533,7 +529,7 @@ export function PlayPanel() {
                 </Button>
                 {isVersionMenuOpen && (
                   <div
-                    className="absolute bottom-12 left-0 z-[360] w-72 rounded-[var(--moon-card-radius)] border border-white/20 glass-button bg-gray-900/90 p-1 text-white shadow-xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200"
+                    className="absolute bottom-12 left-0 z-[360] w-72 rounded-[var(--moon-card-radius)] border border-white/20 bg-gray-900/90 p-1 text-white shadow-xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200"
                     role="menu"
                   >
                     <button
