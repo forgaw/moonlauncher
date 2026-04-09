@@ -98,7 +98,7 @@ export function ToolsPanel() {
     try {
       setMonitor(await backendService.getMonitorSnapshot())
     } catch {
-      // ignore monitor errors
+      
     }
   }, [])
 

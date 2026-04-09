@@ -6,7 +6,6 @@ import { Badge } from "./ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog"
 import { ImageWithFallback } from "./figma/ImageWithFallback"
 import { backendService, type NewsArticle } from "../services/backend"
-import minecraftBackground from "figma:asset/c80877b64f6066aa2903984efb421fe249bbada5.png"
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000
 const NEWS_PAGE_STEP = 12
@@ -34,8 +33,38 @@ function openNewsUrl(article: NewsArticle) {
   window.open(target, "_blank", "noopener,noreferrer")
 }
 
-function newsFallbackImage(_article: NewsArticle): string {
-  return minecraftBackground
+function hashString(value: string): number {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash
+}
+
+function newsFallbackImage(article: NewsArticle): string {
+  const key = `${article.id}|${article.title}|${article.category}`
+  const palette = [
+    ["#0b1220", "#1f3b73"],
+    ["#0f172a", "#1e3a8a"],
+    ["#101828", "#134e4a"],
+    ["#111827", "#3f6212"],
+    ["#0a0a0a", "#1f2937"],
+  ] as const
+  const [fromColor, toColor] = palette[hashString(key) % palette.length]
+  const title = String(article.title || "Minecraft News").replace(/[<>&"]/g, " ").slice(0, 44)
+  const category = String(article.category || "Minecraft").replace(/[<>&"]/g, " ").slice(0, 24)
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='1280' height='720' viewBox='0 0 1280 720'>` +
+    `<defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>` +
+    `<stop offset='0%' stop-color='${fromColor}'/><stop offset='100%' stop-color='${toColor}'/>` +
+    `</linearGradient></defs>` +
+    `<rect width='1280' height='720' fill='url(#g)'/>` +
+    `<rect x='64' y='64' width='1152' height='592' rx='24' fill='rgba(0,0,0,0.32)' stroke='rgba(255,255,255,0.18)'/>` +
+    `<text x='96' y='156' fill='rgba(255,255,255,0.8)' font-family='Segoe UI, Arial' font-size='34'>Minecraft News</text>` +
+    `<text x='96' y='234' fill='white' font-family='Segoe UI, Arial' font-size='50' font-weight='700'>${category}</text>` +
+    `<text x='96' y='304' fill='rgba(255,255,255,0.92)' font-family='Segoe UI, Arial' font-size='36'>${title}</text>` +
+    `</svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
 function toPlainText(value: string): string {

@@ -153,7 +153,7 @@ export function FriendsPanel() {
       const status = await backendService.getCoopServerStatus()
       setCoopStatus(status)
     } catch {
-      // ignore polling errors
+      
     }
   }, [])
 
@@ -161,7 +161,7 @@ export function FriendsPanel() {
     try {
       setRadminStatus(await backendService.getRadminStatus())
     } catch {
-      // ignore status errors
+      
     }
   }, [])
 

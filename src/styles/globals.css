@@ -158,9 +158,7 @@
   }
 }
 
-/**
- * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
- */
+
 @layer base {
   :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
     h1 {
@@ -226,7 +224,7 @@ html {
   font-family: var(--font-mojangles);
 }
 
-/* Custom utility classes for the Minecraft launcher */
+
 @layer utilities {
   .line-clamp-2 {
     overflow: hidden;
@@ -235,7 +233,7 @@ html {
     -webkit-line-clamp: 2;
   }
 
-  /* Glassmorphism utilities */
+  
   .glass-button {
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(var(--moon-glass-blur));
@@ -292,7 +290,7 @@ html {
     box-shadow: 0 12px 40px rgba(var(--moon-accent-rgb), 0.25);
   }
 
-  /* Dark mode adjustments */
+  
   .dark .glass-button {
     background: rgba(0, 0, 0, 0.2);
     border-color: rgba(255, 255, 255, 0.1);
@@ -317,7 +315,7 @@ html {
     box-shadow: 0 12px 40px rgba(var(--moon-accent-rgb), 0.2);
   }
 
-  /* Liquid animation effect */
+  
   .liquid-shimmer {
     position: relative;
     overflow: hidden;
@@ -344,12 +342,12 @@ html {
     transform: translateX(100%) translateY(100%);
   }
 
-  /* Mojangles font utility */
+  
   .font-mojangles {
     font-family: var(--font-mojangles);
   }
 
-  /* Nunito font utility */
+  
   .font-nunito {
     font-family: var(--font-nunito);
   }

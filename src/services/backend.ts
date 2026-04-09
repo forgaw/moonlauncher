@@ -378,7 +378,7 @@ class BackendService {
     try {
       window.localStorage.setItem(this.versionsStorageKey, JSON.stringify(versions.slice(0, 500)))
     } catch {
-      // ignore localStorage write errors
+      
     }
   }
 
@@ -436,7 +436,7 @@ class BackendService {
           detail = parsed.detail
         }
       } catch {
-        // ignore JSON parse errors and keep raw text
+        
       }
       throw new Error(`Request failed (${response.status}) ${detail}`)
     }

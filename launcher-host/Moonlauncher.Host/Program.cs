@@ -191,7 +191,7 @@ internal sealed class LauncherWindow : Form
         }
         catch
         {
-            // Ignore icon loading issues.
+            
         }
     }
 
@@ -274,7 +274,7 @@ internal sealed class LauncherWindow : Form
         }
         catch
         {
-            // Ignore postMessage parsing errors.
+            
         }
     }
 
@@ -306,7 +306,7 @@ internal sealed class LauncherWindow : Form
         }
         catch
         {
-            // Ignore shutdown errors.
+            
         }
     }
 }

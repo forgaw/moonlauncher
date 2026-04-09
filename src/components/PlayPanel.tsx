@@ -422,6 +422,22 @@ export function PlayPanel() {
     }
   }, [selectedVersionData, loadVersions])
 
+  const versionMenuItemClass =
+    "w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-white hover:bg-white/10 focus:bg-white/10 transition-colors font-mojangles disabled:opacity-50 disabled:cursor-not-allowed"
+
+  const handleVersionMenuAction = useCallback((action: "refresh" | "open-folder" | "delete-version") => {
+    setIsVersionMenuOpen(false)
+    if (action === "refresh") {
+      void loadVersions()
+      return
+    }
+    if (action === "open-folder") {
+      void openSelectedVersionFolder()
+      return
+    }
+    void uninstallSelectedVersion()
+  }, [loadVersions, openSelectedVersionFolder, uninstallSelectedVersion])
+
   const playBackgroundImage = String(launcherSettings.playBackgroundUrl || "").trim() || minecraftBackground
   const backgroundOpacity = Math.max(0.2, Math.min(0.9, Number(launcherSettings.themeBackgroundOpacity ?? 0.45)))
 
@@ -529,16 +545,14 @@ export function PlayPanel() {
                 </Button>
                 {isVersionMenuOpen && (
                   <div
-                    className="absolute bottom-12 left-0 z-[360] w-72 rounded-[var(--moon-card-radius)] border border-white/20 bg-gray-900/90 p-1 text-white shadow-xl backdrop-blur-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200"
+                    className="!absolute bottom-12 left-0 z-[360] w-72 glass-button border-white/20 bg-black/90 p-1 text-white backdrop-blur-xl shadow-xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200"
                     role="menu"
                   >
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-white hover:bg-white/10 focus:bg-white/10 transition-colors font-mojangles"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false)
-                        void loadVersions()
-                      }}
+                      className={versionMenuItemClass}
+                      onClick={() => handleVersionMenuAction("refresh")}
+                      role="menuitem"
                     >
                       <RefreshCw className="size-4" />
                       Обновить список версий
@@ -546,23 +560,19 @@ export function PlayPanel() {
 
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-white hover:bg-white/10 focus:bg-white/10 transition-colors font-mojangles"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false)
-                        void openSelectedVersionFolder()
-                      }}
+                      className={versionMenuItemClass}
+                      onClick={() => handleVersionMenuAction("open-folder")}
+                      role="menuitem"
                     >
                       <FolderOpen className="size-4" />
                       Открыть папку версии
                     </button>
                     <button
                       type="button"
-                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-red-300 transition-colors font-mojangles disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-500/15 hover:text-red-200"
-                      onClick={() => {
-                        setIsVersionMenuOpen(false)
-                        void uninstallSelectedVersion()
-                      }}
+                      className={`${versionMenuItemClass} text-red-300 hover:text-red-200 hover:bg-red-500/15 focus:bg-red-500/15`}
+                      onClick={() => handleVersionMenuAction("delete-version")}
                       disabled={!selectedVersionData || !selectedVersionData.installed || selectedVersionData.type === "modpack"}
+                      role="menuitem"
                     >
                       <Trash2 className="size-4" />
                       Удалить выбранную версию

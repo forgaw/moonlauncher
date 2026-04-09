@@ -68,7 +68,7 @@ export function LauncherSidebar({ activeTab, onTabChange, sidebarOpacity = 0.9 }
       const data = await backendService.getProfilesPresence()
       setPresence(data)
     } catch {
-      // ignore presence polling errors
+      
     }
   }, [])
 

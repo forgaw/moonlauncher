@@ -451,7 +451,7 @@ export function ModpacksPanel() {
       try {
         await backendService.applyCustomPack(installed.fileName, wipeBeforeApply)
       } catch {
-        // keep downloaded pack even if apply fails
+        
       }
       await loadCustomPacks()
       notifySettingsUpdated()
